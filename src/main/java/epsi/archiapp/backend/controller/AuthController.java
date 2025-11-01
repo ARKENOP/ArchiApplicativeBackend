@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/auth")
@@ -52,11 +53,15 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody RegisterRequest registerRequest) {
         if (userRepository.existsByUsername(registerRequest.getUsername())) {
-            return ResponseEntity.badRequest().body("Username is already taken");
+            return ResponseEntity
+                    .badRequest()
+                    .body(Map.of("message", "Username is already taken"));
         }
 
         if (userRepository.existsByEmail(registerRequest.getEmail())) {
-            return ResponseEntity.badRequest().body("Email is already in use");
+            return ResponseEntity
+                    .badRequest()
+                    .body(Map.of("message", "Email is already in use"));
         }
 
         Role userRole = roleRepository.findByName("USER")
@@ -71,6 +76,12 @@ public class AuthController {
 
         userRepository.save(user);
 
-        return ResponseEntity.ok("User registered successfully");
+        Authentication authentication = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(registerRequest.getUsername(), registerRequest.getPassword())
+        );
+        UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+        String token = jwtUtil.generateToken(userDetails);
+
+        return ResponseEntity.ok(new AuthResponse(token));
     }
 }
