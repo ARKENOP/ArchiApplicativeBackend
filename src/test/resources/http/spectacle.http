@@ -1,0 +1,39 @@
+### Récupérer tous les spectacles
+GET http://localhost:8080/api/spectacles
+Accept: application/json
+
+### Récupérer un spectacle par ID
+GET http://localhost:8080/api/spectacles/1
+Accept: application/json
+
+### Créer un nouveau spectacle
+POST http://localhost:8080/api/spectacles
+Content-Type: application/json
+Accept: application/json
+
+{
+  "title": "Concert de Jazz",
+  "description": "Un spectacle de jazz exceptionnel",
+  "date": "2025-12-01T20:00:00",
+  "price": 25.50,
+  "availableTickets": 120,
+  "imageUrl": "https://example.com/images/jazz.jpg"
+}
+
+### Mettre à jour un spectacle existant
+PUT http://localhost:8080/api/spectacles/1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "title": "Concert de Jazz - Version mise à jour",
+  "description": "Spectacle de jazz avec invités spéciaux",
+  "date": "2025-12-02T21:00:00",
+  "price": 30.00,
+  "availableTickets": 100,
+  "imageUrl": "https://example.com/images/jazz_updated.jpg"
+}
+
+### Supprimer un spectacle
+DELETE http://localhost:8080/api/spectacles/1
+Accept: application/json
