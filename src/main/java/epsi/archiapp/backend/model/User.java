@@ -69,7 +69,7 @@ public class User implements UserDetails {
         if (role == null) {
             return Collections.emptyList();
         }
-        return Collections.singletonList(new SimpleGrantedAuthority(role.getName()));
+        return Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role.getName()));
     }
 
     @Override
