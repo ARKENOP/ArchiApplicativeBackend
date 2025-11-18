@@ -1,9 +1,7 @@
 package epsi.archiapp.backend.config;
 
-import epsi.archiapp.backend.model.Role;
 import epsi.archiapp.backend.model.Spectacle;
 import epsi.archiapp.backend.model.User;
-import epsi.archiapp.backend.repository.RoleRepository;
 import epsi.archiapp.backend.repository.SpectacleRepository;
 import epsi.archiapp.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -18,28 +16,22 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class DataInitializer {
 
-    private final RoleRepository roleRepository;
     private final UserRepository userRepository;
     private final SpectacleRepository spectacleRepository;
 
     @Bean
     CommandLineRunner init() {
         return args -> {
-            Role admin = roleRepository.findByName("ADMIN").orElseGet(() -> roleRepository.save(Role.builder().name("ADMIN").build()));
-            Role userRole = roleRepository.findByName("USER").orElseGet(() -> roleRepository.save(Role.builder().name("USER").build()));
-
             if (userRepository.count() == 0) {
                 userRepository.save(User.builder()
                         .email("admin@example.com")
                         .username("admin")
                         .password("admin")
-                        .role(admin)
                         .build());
                 userRepository.save(User.builder()
                         .email("user@example.com")
                         .username("user")
                         .password("user")
-                        .role(userRole)
                         .build());
             }
 
