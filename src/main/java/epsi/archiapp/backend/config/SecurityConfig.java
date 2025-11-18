@@ -34,6 +34,7 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http.csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/auth/**").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/spectacles/**").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/spectacles/**").hasRole("ADMIN")
