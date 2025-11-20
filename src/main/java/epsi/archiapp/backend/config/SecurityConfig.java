@@ -2,7 +2,6 @@ package epsi.archiapp.backend.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -42,14 +41,20 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/auth/**").permitAll()
-                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/spectacles/**").hasAnyRole("USER", "ADMIN")
+                        // Routes publiques pour les spectacles (lecture seule)
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/spectacles/**").permitAll()
+                        // Routes admin pour les spectacles
                         .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/spectacles/**").hasRole("ADMIN")
                         .requestMatchers(org.springframework.http.HttpMethod.PUT, "/api/spectacles/**").hasRole("ADMIN")
                         .requestMatchers(org.springframework.http.HttpMethod.DELETE, "/api/spectacles/**").hasRole("ADMIN")
+                        // Routes pour les réservations (utilisateurs authentifiés)
+                        .requestMatchers("/api/reservations/**").authenticated()
+                        // Routes admin pour les statistiques
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .oauth2ResourceServer(oauth2 -> oauth2.jwt());
+                .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())));
 
         return http.build();
     }

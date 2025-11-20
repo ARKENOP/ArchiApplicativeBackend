@@ -1,7 +1,6 @@
 package epsi.archiapp.backend.repository;
 
 import epsi.archiapp.backend.model.Reservation;
-import epsi.archiapp.backend.model.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -9,11 +8,12 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 
 public interface ReservationRepository extends JpaRepository<Reservation, Long> {
-    @Query("select r from Reservation r join fetch r.spectacle where r.user = :user")
-    List<Reservation> findByUser(@Param("user") User user);
 
-    @Query("select sum(r.totalPrice) from Reservation r")
-    java.math.BigDecimal totalSales();
+    @Query("SELECT r FROM Reservation r JOIN FETCH r.spectacle WHERE r.keycloakUserId = :keycloakUserId ORDER BY r.reservationDate DESC")
+    List<Reservation> findByKeycloakUserId(@Param("keycloakUserId") String keycloakUserId);
+
+    @Query("SELECT SUM(r.totalPrice) FROM Reservation r")
+    java.math.BigDecimal getTotalSales();
 
     interface SalesBySpectacle {
         Long getSpectacleId();
@@ -22,6 +22,10 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
         java.math.BigDecimal getRevenue();
     }
 
-    @Query("select r.spectacle.id as spectacleId, r.spectacle.title as title, sum(r.quantity) as ticketsSold, sum(r.totalPrice) as revenue from Reservation r group by r.spectacle.id, r.spectacle.title order by revenue desc")
-    List<SalesBySpectacle> salesBySpectacle();
+    @Query("SELECT r.spectacle.id as spectacleId, r.spectacle.title as title, " +
+           "SUM(r.quantity) as ticketsSold, SUM(r.totalPrice) as revenue " +
+           "FROM Reservation r " +
+           "GROUP BY r.spectacle.id, r.spectacle.title " +
+           "ORDER BY revenue DESC")
+    List<SalesBySpectacle> getSalesBySpectacle();
 }

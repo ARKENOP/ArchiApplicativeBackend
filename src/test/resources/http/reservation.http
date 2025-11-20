@@ -1,0 +1,30 @@
+### Variables
+@baseUrl = http://localhost:8080
+@token = votre_token
+
+### Créer une réservation
+POST {{baseUrl}}/api/reservations
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "spectacleId": 1,
+  "quantity": 1
+}
+
+### Récupérer toutes les réservations de l'utilisateur connecté
+GET {{baseUrl}}/api/reservations
+Authorization: Bearer {{token}}
+
+### Récupérer une réservation spécifique
+GET {{baseUrl}}/api/reservations/1
+Authorization: Bearer {{token}}
+
+### Annuler une réservation
+DELETE {{baseUrl}}/api/reservations/1
+Authorization: Bearer {{token}}
+
+### Obtenir les statistiques (ADMIN uniquement)
+GET {{baseUrl}}/api/admin/stats
+Authorization: Bearer {{token}}
+

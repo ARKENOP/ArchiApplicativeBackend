@@ -1,15 +1,20 @@
+### Variables
+@baseUrl = http://localhost:8080
+@token = votre_token
+
 ### Récupérer tous les spectacles
-GET http://localhost:8080/api/spectacles
+GET {{baseUrl}}/api/spectacles
 Accept: application/json
 
 ### Récupérer un spectacle par ID
-GET http://localhost:8080/api/spectacles/1
+GET {{baseUrl}}/api/spectacles/1
 Accept: application/json
 
 ### Créer un nouveau spectacle
-POST http://localhost:8080/api/spectacles
+POST {{baseUrl}}/api/spectacles
 Content-Type: application/json
 Accept: application/json
+Authorization: Bearer {{token}}
 
 {
   "title": "Concert de Jazz",
@@ -21,9 +26,10 @@ Accept: application/json
 }
 
 ### Mettre à jour un spectacle existant
-PUT http://localhost:8080/api/spectacles/1
+PUT {{baseUrl}}/api/spectacles/1
 Content-Type: application/json
 Accept: application/json
+Authorization: Bearer {{token}}
 
 {
   "title": "Concert de Jazz - Version mise à jour",
@@ -35,5 +41,6 @@ Accept: application/json
 }
 
 ### Supprimer un spectacle
-DELETE http://localhost:8080/api/spectacles/1
+DELETE {{baseUrl}}/api/spectacles/1
 Accept: application/json
+Authorization: Bearer {{token}}

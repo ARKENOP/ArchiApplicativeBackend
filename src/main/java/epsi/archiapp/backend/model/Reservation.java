@@ -6,7 +6,6 @@ import lombok.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 
 @Entity
 @Table(name = "reservations")
@@ -21,7 +20,7 @@ public class Reservation {
     private Long id;
 
     @Column(nullable = false)
-    private LocalDateTime date;
+    private LocalDateTime reservationDate;
 
     @Column(nullable = false)
     private Integer quantity;
@@ -29,12 +28,10 @@ public class Reservation {
     @Column(name = "total_price", nullable = false, precision = 10, scale = 2)
     private BigDecimal totalPrice;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id")
-    @JsonIgnore
-    private User user;
+    @Column(name = "keycloak_user_id", nullable = false)
+    private String keycloakUserId;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "spectacle_id")
+    @JoinColumn(name = "spectacle_id", nullable = false)
     private Spectacle spectacle;
 }
