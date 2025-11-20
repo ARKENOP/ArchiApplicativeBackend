@@ -5,10 +5,7 @@ import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.HashSet;
-import java.util.Set;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.validation.constraints.*;
 
 @Entity
@@ -49,9 +46,4 @@ public class Spectacle {
 
     @Version
     private Long version;
-
-    @OneToMany(mappedBy = "spectacle")
-    @JsonIgnore
-    @Builder.Default
-    private Set<Reservation> reservations = new HashSet<>();
 }
