@@ -16,6 +16,14 @@ Authorization: Bearer {{token}}
 GET {{baseUrl}}/api/reservations
 Authorization: Bearer {{token}}
 
+### Récupérer les réservations de l'utilisateur avec pagination (page 0, 10 éléments)
+GET {{baseUrl}}/api/reservations?page=0&size=10
+Authorization: Bearer {{token}}
+
+### Récupérer les réservations de l'utilisateur avec pagination et tri personnalisé
+GET {{baseUrl}}/api/reservations?page=0&size=5&sort=totalPrice,desc
+Authorization: Bearer {{token}}
+
 ### Récupérer une réservation spécifique
 GET {{baseUrl}}/api/reservations/1
 Authorization: Bearer {{token}}

@@ -1,42 +1,69 @@
 package epsi.archiapp.backend.service;
 
+import epsi.archiapp.backend.dto.SpectacleRequest;
+import epsi.archiapp.backend.dto.SpectacleResponse;
+import epsi.archiapp.backend.exception.ResourceNotFoundException;
+import epsi.archiapp.backend.mapper.SpectacleMapper;
 import epsi.archiapp.backend.model.Spectacle;
 import epsi.archiapp.backend.repository.SpectacleRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
-
-import java.util.List;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
+@Transactional(readOnly = true)
 public class SpectacleService {
+
     private final SpectacleRepository spectacleRepository;
+    private final SpectacleMapper spectacleMapper;
 
-    public List<Spectacle> listAll() {
-        return spectacleRepository.findAll();
+    public Page<SpectacleResponse> listAll(Pageable pageable) {
+        log.debug("Récupération de la liste des spectacles - page: {}", pageable.getPageNumber());
+        return spectacleRepository.findAll(pageable)
+                .map(spectacleMapper::toResponse);
     }
 
-    public Spectacle get(Long id) {
-        return spectacleRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("Spectacle not found"));
+    public SpectacleResponse get(Long id) {
+        log.debug("Récupération du spectacle avec ID: {}", id);
+        Spectacle spectacle = spectacleRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Spectacle", "id", id));
+        return spectacleMapper.toResponse(spectacle);
     }
 
-    public Spectacle create(Spectacle spectacle) {
-        return spectacleRepository.save(spectacle);
+    @Transactional
+    public SpectacleResponse create(SpectacleRequest request) {
+        log.info("Création d'un nouveau spectacle: {}", request.getTitle());
+        Spectacle spectacle = spectacleMapper.toEntity(request);
+        Spectacle saved = spectacleRepository.save(spectacle);
+        log.info("Spectacle créé avec succès - ID: {}", saved.getId());
+        return spectacleMapper.toResponse(saved);
     }
 
-    public Spectacle update(Long id, Spectacle updated) {
-        Spectacle s = get(id);
-        s.setTitle(updated.getTitle());
-        s.setDescription(updated.getDescription());
-        s.setDate(updated.getDate());
-        s.setPrice(updated.getPrice());
-        s.setAvailableTickets(updated.getAvailableTickets());
-        s.setImageUrl(updated.getImageUrl());
-        return spectacleRepository.save(s);
+    @Transactional
+    public SpectacleResponse update(Long id, SpectacleRequest request) {
+        log.info("Mise à jour du spectacle avec ID: {}", id);
+        Spectacle spectacle = spectacleRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Spectacle", "id", id));
+
+        spectacleMapper.updateEntityFromRequest(request, spectacle);
+        Spectacle updated = spectacleRepository.save(spectacle);
+        log.info("Spectacle mis à jour avec succès - ID: {}", updated.getId());
+        return spectacleMapper.toResponse(updated);
     }
 
+    @Transactional
     public void delete(Long id) {
+        log.info("Suppression du spectacle avec ID: {}", id);
+        if (!spectacleRepository.existsById(id)) {
+            throw new ResourceNotFoundException("Spectacle", "id", id);
+        }
         spectacleRepository.deleteById(id);
+        log.info("Spectacle supprimé avec succès - ID: {}", id);
     }
 }
 

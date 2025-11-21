@@ -2,13 +2,19 @@ package epsi.archiapp.backend.model;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 
 @Entity
-@Table(name = "reservations")
+@Table(name = "reservations", indexes = {
+    @Index(name = "idx_reservation_user", columnList = "keycloak_user_id"),
+    @Index(name = "idx_reservation_date", columnList = "reservation_date")
+})
+@EntityListeners(AuditingEntityListener.class)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -19,7 +25,8 @@ public class Reservation {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
+    @CreatedDate
+    @Column(name = "reservation_date", nullable = false, updatable = false)
     private LocalDateTime reservationDate;
 
     @Column(nullable = false)

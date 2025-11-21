@@ -6,6 +6,18 @@
 GET {{baseUrl}}/api/spectacles
 Accept: application/json
 
+### Récupérer les spectacles avec pagination (page 0, 20 éléments par défaut)
+GET {{baseUrl}}/api/spectacles?page=0&size=20
+Accept: application/json
+
+### Récupérer les spectacles avec pagination et tri par prix décroissant
+GET {{baseUrl}}/api/spectacles?page=0&size=10&sort=price,desc
+Accept: application/json
+
+### Récupérer les spectacles triés par date croissante (défaut)
+GET {{baseUrl}}/api/spectacles?sort=date,asc
+Accept: application/json
+
 ### Récupérer un spectacle par ID
 GET {{baseUrl}}/api/spectacles/1
 Accept: application/json
