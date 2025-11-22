@@ -24,6 +24,13 @@ public interface SpectacleRepository extends JpaRepository<Spectacle, Long> {
     @Query("SELECT s FROM Spectacle s WHERE s.id = :id")
     Optional<Spectacle> findByIdWithLock(@Param("id") Long id);
 
+    /**
+     * Récupère un spectacle avec un verrouillage optimiste (compatible H2 pour les tests).
+     */
+    @Lock(LockModeType.OPTIMISTIC)
+    @Query("SELECT s FROM Spectacle s WHERE s.id = :id")
+    Optional<Spectacle> findByIdWithOptimisticLock(@Param("id") Long id);
+
     Spectacle findByTitle(String title);
 
     @Query("SELECT s FROM Spectacle s WHERE s.date >= :now ORDER BY s.date ASC")
