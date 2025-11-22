@@ -36,10 +36,10 @@ public class ReservationService {
 
     /**
      * Crée une nouvelle réservation.
-     * Invalide les caches : statistiques, spectacle concerné (par ID et liste paginée), et réservations de l'utilisateur
+     * Invalide les caches : statistiques, réservations et spectacles
      */
     @Transactional
-    @CacheEvict(value = "statistics", allEntries = true)
+    @CacheEvict(value = {"statistics", "reservations", "spectacles"}, allEntries = true)
     public ReservationResponse createReservation(String keycloakUserId, ReservationRequest request) {
         log.info("Création de réservation - Utilisateur: {}, Spectacle: {}, Quantité: {} - Invalidation des caches",
                  keycloakUserId, request.getSpectacleId(), request.getQuantity());
@@ -115,10 +115,11 @@ public class ReservationService {
 
     /**
      * Annule une réservation existante.
-     * Invalide les caches : statistiques et réservations
+     * Invalide les caches : statistiques, réservations et spectacles
+     * (car le nombre de billets disponibles change)
      */
     @Transactional
-    @CacheEvict(value = {"statistics", "reservations"}, allEntries = true)
+    @CacheEvict(value = {"statistics", "reservations", "spectacles"}, allEntries = true)
     public void cancelReservation(Long id, String keycloakUserId) {
         log.info("Annulation de la réservation {} par l'utilisateur: {} - Invalidation des caches", id, keycloakUserId);
         Reservation reservation = reservationRepository.findById(id)

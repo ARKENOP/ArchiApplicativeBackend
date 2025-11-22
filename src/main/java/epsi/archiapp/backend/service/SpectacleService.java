@@ -52,7 +52,7 @@ public class SpectacleService {
      * Invalide tout le cache des spectacles car la liste a changé.
      */
     @Transactional
-    @CacheEvict(value = "spectacles", allEntries = true)
+    @CacheEvict(value = {"statistics", "reservations", "spectacles"}, allEntries = true)
     public SpectacleResponse create(SpectacleRequest request) {
         log.info("Création d'un nouveau spectacle: {} - Invalidation du cache", request.getTitle());
         Spectacle spectacle = spectacleMapper.toEntity(request);
@@ -66,7 +66,7 @@ public class SpectacleService {
      * Invalide tout le cache des spectacles car les données ont changé.
      */
     @Transactional
-    @CacheEvict(value = "spectacles", allEntries = true)
+    @CacheEvict(value = {"statistics", "reservations", "spectacles"}, allEntries = true)
     public SpectacleResponse update(Long id, SpectacleRequest request) {
         log.info("Mise à jour du spectacle avec ID: {} - Invalidation du cache", id);
         Spectacle spectacle = spectacleRepository.findById(id)
@@ -83,7 +83,7 @@ public class SpectacleService {
      * Invalide tout le cache des spectacles car la liste a changé.
      */
     @Transactional
-    @CacheEvict(value = "spectacles", allEntries = true)
+    @CacheEvict(value = {"statistics", "reservations", "spectacles"}, allEntries = true)
     public void delete(Long id) {
         log.info("Suppression du spectacle avec ID: {} - Invalidation du cache", id);
         if (!spectacleRepository.existsById(id)) {
