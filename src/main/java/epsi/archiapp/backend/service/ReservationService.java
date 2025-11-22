@@ -44,8 +44,9 @@ public class ReservationService {
         log.info("Création de réservation - Utilisateur: {}, Spectacle: {}, Quantité: {} - Invalidation des caches",
                  keycloakUserId, request.getSpectacleId(), request.getQuantity());
 
-        // Récupérer le spectacle avec verrouillage pessimiste
-        Spectacle spectacle = spectacleRepository.findById(request.getSpectacleId())
+        // Récupérer le spectacle avec verrouillage pessimiste pour éviter les race conditions (overbooking)
+        // Le verrou empêche d'autres transactions de lire/modifier ce spectacle jusqu'à la fin de cette transaction
+        Spectacle spectacle = spectacleRepository.findByIdWithLock(request.getSpectacleId())
                 .orElseThrow(() -> new ResourceNotFoundException("Spectacle", "id", request.getSpectacleId()));
 
         // Vérifier la disponibilité
