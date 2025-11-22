@@ -1,6 +1,7 @@
 package epsi.archiapp.backend.dto;
 
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -16,6 +17,7 @@ public class ReservationRequest {
 
     @NotNull(message = "La quantité est requise")
     @Min(value = 1, message = "La quantité doit être au moins 1")
+    @Max(value = 50, message = "Vous ne pouvez pas réserver plus de 50 billets par transaction")
     private Integer quantity;
 }
 

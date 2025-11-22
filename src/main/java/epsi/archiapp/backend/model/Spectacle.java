@@ -2,6 +2,11 @@ package epsi.archiapp.backend.model;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedBy;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -9,7 +14,11 @@ import java.time.LocalDateTime;
 import jakarta.validation.constraints.*;
 
 @Entity
-@Table(name = "spectacles")
+@Table(name = "spectacles", indexes = {
+    @Index(name = "idx_spectacle_date", columnList = "date"),
+    @Index(name = "idx_spectacle_title", columnList = "title")
+})
+@EntityListeners(AuditingEntityListener.class)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -46,4 +55,20 @@ public class Spectacle {
 
     @Version
     private Long version;
+
+    @CreatedDate
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    @LastModifiedDate
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+
+    @CreatedBy
+    @Column(name = "created_by", nullable = false, updatable = false)
+    private String createdBy;
+
+    @LastModifiedBy
+    @Column(name = "updated_by")
+    private String updatedBy;
 }

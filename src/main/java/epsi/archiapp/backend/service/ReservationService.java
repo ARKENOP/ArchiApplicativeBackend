@@ -3,13 +3,22 @@ package epsi.archiapp.backend.service;
 import epsi.archiapp.backend.dto.ReservationRequest;
 import epsi.archiapp.backend.dto.ReservationResponse;
 import epsi.archiapp.backend.dto.StatsResponse;
+import epsi.archiapp.backend.exception.InsufficientTicketsException;
+import epsi.archiapp.backend.exception.ResourceNotFoundException;
+import epsi.archiapp.backend.exception.UnauthorizedAccessException;
+import epsi.archiapp.backend.mapper.ReservationMapper;
 import epsi.archiapp.backend.model.Reservation;
 import epsi.archiapp.backend.model.Spectacle;
 import epsi.archiapp.backend.repository.ReservationRepository;
 import epsi.archiapp.backend.repository.SpectacleRepository;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -18,34 +27,45 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ReservationService {
 
     private final ReservationRepository reservationRepository;
     private final SpectacleRepository spectacleRepository;
+    private final ReservationMapper reservationMapper;
 
+    /**
+     * Crée une nouvelle réservation.
+     * Invalide les caches : statistiques, réservations et spectacles
+     */
     @Transactional
+    @CacheEvict(value = {"statistics", "reservations", "spectacles"}, allEntries = true)
     public ReservationResponse createReservation(String keycloakUserId, ReservationRequest request) {
-        // Récupérer le spectacle
-        Spectacle spectacle = spectacleRepository.findById(request.getSpectacleId())
-                .orElseThrow(() -> new IllegalArgumentException("Spectacle non trouvé avec l'ID: " + request.getSpectacleId()));
+        log.info("Création de réservation - Utilisateur: {}, Spectacle: {}, Quantité: {} - Invalidation des caches",
+                 keycloakUserId, request.getSpectacleId(), request.getQuantity());
+
+        // Récupérer le spectacle avec verrouillage pessimiste pour éviter les race conditions (overbooking)
+        // Le verrou empêche d'autres transactions de lire/modifier ce spectacle jusqu'à la fin de cette transaction
+        Spectacle spectacle = spectacleRepository.findByIdWithLock(request.getSpectacleId())
+                .orElseThrow(() -> new ResourceNotFoundException("Spectacle", "id", request.getSpectacleId()));
 
         // Vérifier la disponibilité
         if (spectacle.getAvailableTickets() < request.getQuantity()) {
-            throw new IllegalStateException("Pas assez de billets disponibles. Disponibles: " +
-                    spectacle.getAvailableTickets() + ", Demandés: " + request.getQuantity());
+            log.warn("Billets insuffisants - Disponibles: {}, Demandés: {}",
+                     spectacle.getAvailableTickets(), request.getQuantity());
+            throw new InsufficientTicketsException(spectacle.getAvailableTickets(), request.getQuantity());
+        }
+
+        // Vérifier que le spectacle est dans le futur
+        if (spectacle.getDate().isBefore(LocalDateTime.now())) {
+            throw new IllegalStateException("Impossible de réserver un spectacle passé");
         }
 
         // Calculer le prix total
         BigDecimal totalPrice = spectacle.getPrice().multiply(BigDecimal.valueOf(request.getQuantity()));
 
         // Créer la réservation
-        Reservation reservation = Reservation.builder()
-                .keycloakUserId(keycloakUserId)
-                .spectacle(spectacle)
-                .quantity(request.getQuantity())
-                .totalPrice(totalPrice)
-                .reservationDate(LocalDateTime.now())
-                .build();
+        Reservation reservation = reservationMapper.toEntity(request, spectacle, keycloakUserId, totalPrice);
 
         // Mettre à jour les billets disponibles
         spectacle.setAvailableTickets(spectacle.getAvailableTickets() - request.getQuantity());
@@ -54,36 +74,68 @@ public class ReservationService {
         // Sauvegarder la réservation
         reservation = reservationRepository.save(reservation);
 
-        return mapToResponse(reservation);
+        log.info("Réservation créée avec succès - ID: {}, Montant: {}",
+                 reservation.getId(), totalPrice);
+
+        return reservationMapper.toResponse(reservation);
     }
 
-    public List<ReservationResponse> getUserReservations(String keycloakUserId) {
-        List<Reservation> reservations = reservationRepository.findByKeycloakUserId(keycloakUserId);
-        return reservations.stream()
-                .map(this::mapToResponse)
-                .collect(Collectors.toList());
+    /**
+     * Récupère les réservations d'un utilisateur avec pagination.
+     * Le résultat est mis en cache par utilisateur et page.
+     */
+    @Cacheable(value = "reservations", key = "'user-' + #keycloakUserId + '-page-' + #pageable.pageNumber + '-' + #pageable.pageSize")
+    @Transactional(readOnly = true)
+    public Page<ReservationResponse> getUserReservations(String keycloakUserId, Pageable pageable) {
+        log.debug("Récupération des réservations pour l'utilisateur: {} - page: {} (CACHE MISS)",
+                keycloakUserId, pageable.getPageNumber());
+        return reservationRepository.findByKeycloakUserId(keycloakUserId, pageable)
+                .map(reservationMapper::toResponse);
     }
 
+    /**
+     * Récupère une réservation par ID.
+     * Le résultat est mis en cache par ID de réservation.
+     */
+    @Cacheable(value = "reservations", key = "'reservation-' + #id")
+    @Transactional(readOnly = true)
     public ReservationResponse getReservationById(Long id, String keycloakUserId) {
+        log.debug("Récupération de la réservation {} pour l'utilisateur: {} (CACHE MISS)", id, keycloakUserId);
         Reservation reservation = reservationRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Réservation non trouvée avec l'ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Réservation", "id", id));
 
         // Vérifier que la réservation appartient bien à l'utilisateur
         if (!reservation.getKeycloakUserId().equals(keycloakUserId)) {
-            throw new SecurityException("Vous n'êtes pas autorisé à accéder à cette réservation");
+            log.warn("Tentative d'accès non autorisé à la réservation {} par l'utilisateur {}",
+                     id, keycloakUserId);
+            throw new UnauthorizedAccessException("cette réservation", id);
         }
 
-        return mapToResponse(reservation);
+        return reservationMapper.toResponse(reservation);
     }
 
+    /**
+     * Annule une réservation existante.
+     * Invalide les caches : statistiques, réservations et spectacles
+     * (car le nombre de billets disponibles change)
+     */
     @Transactional
+    @CacheEvict(value = {"statistics", "reservations", "spectacles"}, allEntries = true)
     public void cancelReservation(Long id, String keycloakUserId) {
+        log.info("Annulation de la réservation {} par l'utilisateur: {} - Invalidation des caches", id, keycloakUserId);
         Reservation reservation = reservationRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Réservation non trouvée avec l'ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Réservation", "id", id));
 
         // Vérifier que la réservation appartient bien à l'utilisateur
         if (!reservation.getKeycloakUserId().equals(keycloakUserId)) {
-            throw new SecurityException("Vous n'êtes pas autorisé à annuler cette réservation");
+            log.warn("Tentative d'annulation non autorisée de la réservation {} par l'utilisateur {}",
+                     id, keycloakUserId);
+            throw new UnauthorizedAccessException("cette réservation", id);
+        }
+
+        // Vérifier que le spectacle n'est pas déjà passé
+        if (reservation.getSpectacle().getDate().isBefore(LocalDateTime.now())) {
+            throw new IllegalStateException("Impossible d'annuler une réservation pour un spectacle passé");
         }
 
         // Remettre les billets disponibles
@@ -93,9 +145,21 @@ public class ReservationService {
 
         // Supprimer la réservation
         reservationRepository.delete(reservation);
+
+        log.info("Réservation annulée avec succès - ID: {}", id);
     }
 
+    /**
+     * Récupère les statistiques de ventes.
+     * Résultat mis en cache car le calcul est coûteux (plusieurs requêtes SQL).
+     * Le cache est invalidé à chaque création/annulation de réservation.
+     * Cache valide pendant 5 minutes maximum.
+     */
+    @Cacheable(value = "statistics")
+    @Transactional(readOnly = true)
     public StatsResponse getStatistics() {
+        log.debug("Calcul des statistiques de ventes (CACHE MISS)");
+
         BigDecimal totalRevenue = reservationRepository.getTotalSales();
         if (totalRevenue == null) {
             totalRevenue = BigDecimal.ZERO;
@@ -113,28 +177,13 @@ public class ReservationService {
                                 .build())
                         .collect(Collectors.toList());
 
+        log.debug("Statistiques calculées - Revenus: {}, Réservations: {}",
+                  totalRevenue, totalReservations);
+
         return StatsResponse.builder()
                 .totalRevenue(totalRevenue)
                 .totalReservations(totalReservations)
                 .salesBySpectacle(salesBySpectacle)
-                .build();
-    }
-
-    private ReservationResponse mapToResponse(Reservation reservation) {
-        Spectacle spectacle = reservation.getSpectacle();
-
-        return ReservationResponse.builder()
-                .id(reservation.getId())
-                .reservationDate(reservation.getReservationDate())
-                .quantity(reservation.getQuantity())
-                .totalPrice(reservation.getTotalPrice())
-                .spectacle(ReservationResponse.SpectacleInfo.builder()
-                        .id(spectacle.getId())
-                        .title(spectacle.getTitle())
-                        .date(spectacle.getDate())
-                        .price(spectacle.getPrice())
-                        .imageUrl(spectacle.getImageUrl())
-                        .build())
                 .build();
     }
 }

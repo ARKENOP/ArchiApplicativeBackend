@@ -40,7 +40,13 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
+                        // Routes publiques
+                        .requestMatchers("/api/info", "/api/health").permitAll()
                         .requestMatchers("/auth/**").permitAll()
+                        // Swagger et documentation API (OpenAPI 3)
+                        .requestMatchers("/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        .requestMatchers("/v3/api-docs/**", "/api-docs/**").permitAll()
+                        .requestMatchers("/swagger-resources/**", "/webjars/**").permitAll()
                         // Routes publiques pour les spectacles (lecture seule)
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/spectacles/**").permitAll()
                         // Routes admin pour les spectacles
