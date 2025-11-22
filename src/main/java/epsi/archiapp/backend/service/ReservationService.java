@@ -15,6 +15,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,9 +34,14 @@ public class ReservationService {
     private final SpectacleRepository spectacleRepository;
     private final ReservationMapper reservationMapper;
 
+    /**
+     * Crée une nouvelle réservation.
+     * Invalide les caches : statistiques, spectacle concerné (par ID et liste paginée), et réservations de l'utilisateur
+     */
     @Transactional
+    @CacheEvict(value = "statistics", allEntries = true)
     public ReservationResponse createReservation(String keycloakUserId, ReservationRequest request) {
-        log.info("Création de réservation - Utilisateur: {}, Spectacle: {}, Quantité: {}",
+        log.info("Création de réservation - Utilisateur: {}, Spectacle: {}, Quantité: {} - Invalidation des caches",
                  keycloakUserId, request.getSpectacleId(), request.getQuantity());
 
         // Récupérer le spectacle avec verrouillage pessimiste
@@ -72,17 +79,27 @@ public class ReservationService {
         return reservationMapper.toResponse(reservation);
     }
 
+    /**
+     * Récupère les réservations d'un utilisateur avec pagination.
+     * Le résultat est mis en cache par utilisateur et page.
+     */
+    @Cacheable(value = "reservations", key = "'user-' + #keycloakUserId + '-page-' + #pageable.pageNumber + '-' + #pageable.pageSize")
     @Transactional(readOnly = true)
     public Page<ReservationResponse> getUserReservations(String keycloakUserId, Pageable pageable) {
-        log.debug("Récupération des réservations pour l'utilisateur: {} - page: {}",
+        log.debug("Récupération des réservations pour l'utilisateur: {} - page: {} (CACHE MISS)",
                 keycloakUserId, pageable.getPageNumber());
         return reservationRepository.findByKeycloakUserId(keycloakUserId, pageable)
                 .map(reservationMapper::toResponse);
     }
 
+    /**
+     * Récupère une réservation par ID.
+     * Le résultat est mis en cache par ID de réservation.
+     */
+    @Cacheable(value = "reservations", key = "'reservation-' + #id")
     @Transactional(readOnly = true)
     public ReservationResponse getReservationById(Long id, String keycloakUserId) {
-        log.debug("Récupération de la réservation {} pour l'utilisateur: {}", id, keycloakUserId);
+        log.debug("Récupération de la réservation {} pour l'utilisateur: {} (CACHE MISS)", id, keycloakUserId);
         Reservation reservation = reservationRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Réservation", "id", id));
 
@@ -96,9 +113,14 @@ public class ReservationService {
         return reservationMapper.toResponse(reservation);
     }
 
+    /**
+     * Annule une réservation existante.
+     * Invalide les caches : statistiques et réservations
+     */
     @Transactional
+    @CacheEvict(value = {"statistics", "reservations"}, allEntries = true)
     public void cancelReservation(Long id, String keycloakUserId) {
-        log.info("Annulation de la réservation {} par l'utilisateur: {}", id, keycloakUserId);
+        log.info("Annulation de la réservation {} par l'utilisateur: {} - Invalidation des caches", id, keycloakUserId);
         Reservation reservation = reservationRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Réservation", "id", id));
 
@@ -125,8 +147,17 @@ public class ReservationService {
         log.info("Réservation annulée avec succès - ID: {}", id);
     }
 
+    /**
+     * Récupère les statistiques de ventes.
+     * Résultat mis en cache car le calcul est coûteux (plusieurs requêtes SQL).
+     * Le cache est invalidé à chaque création/annulation de réservation.
+     * Cache valide pendant 5 minutes maximum.
+     */
+    @Cacheable(value = "statistics")
     @Transactional(readOnly = true)
     public StatsResponse getStatistics() {
+        log.debug("Calcul des statistiques de ventes (CACHE MISS)");
+
         BigDecimal totalRevenue = reservationRepository.getTotalSales();
         if (totalRevenue == null) {
             totalRevenue = BigDecimal.ZERO;

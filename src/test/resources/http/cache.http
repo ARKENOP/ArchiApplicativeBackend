@@ -1,0 +1,64 @@
+### Variables
+@host = http://localhost:8080
+@adminToken = YOUR_ADMIN_TOKEN_HERE
+
+### 1. Récupérer les statistiques du cache
+GET {{host}}/api/admin/cache/statistics
+Authorization: Bearer {{adminToken}}
+
+### 2. Lister les noms des caches disponibles
+GET {{host}}/api/admin/cache/names
+Authorization: Bearer {{adminToken}}
+
+### 3. Vider tous les caches
+DELETE {{host}}/api/admin/cache
+Authorization: Bearer {{adminToken}}
+
+### 4. Vider un cache spécifique (spectacles)
+DELETE {{host}}/api/admin/cache/spectacles
+Authorization: Bearer {{adminToken}}
+
+### 5. Vider un cache spécifique (reservations)
+DELETE {{host}}/api/admin/cache/reservations
+Authorization: Bearer {{adminToken}}
+
+### 6. Vider un cache spécifique (statistics)
+DELETE {{host}}/api/admin/cache/statistics
+Authorization: Bearer {{adminToken}}
+
+###############################################
+### SCÉNARIO DE TEST DU CACHE
+###############################################
+
+### Étape 1: Vider tous les caches pour repartir de zéro
+DELETE {{host}}/api/admin/cache
+Authorization: Bearer {{adminToken}}
+
+### Étape 2: Voir les stats initiales (tout à 0)
+GET {{host}}/api/admin/cache/statistics
+Authorization: Bearer {{adminToken}}
+
+### Étape 3: Appeler la liste des spectacles (première fois = CACHE MISS)
+GET {{host}}/api/spectacles?page=0&size=10
+Authorization: Bearer {{adminToken}}
+
+### Étape 4: Voir les stats après le premier appel (1 miss, 0 hit)
+GET {{host}}/api/admin/cache/statistics
+Authorization: Bearer {{adminToken}}
+
+### Étape 5: Appeler la liste des spectacles (deuxième fois = CACHE HIT)
+GET {{host}}/api/spectacles?page=0&size=10
+Authorization: Bearer {{adminToken}}
+
+### Étape 6: Voir les stats après le deuxième appel (1 miss, 1 hit, hit rate = 50%)
+GET {{host}}/api/admin/cache/statistics
+Authorization: Bearer {{adminToken}}
+
+### Étape 7: Appeler encore plusieurs fois pour augmenter le hit rate
+GET {{host}}/api/spectacles?page=0&size=10
+Authorization: Bearer {{adminToken}}
+
+### Étape 8: Voir les stats finales (1 miss, plusieurs hits, hit rate élevé)
+GET {{host}}/api/admin/cache/statistics
+Authorization: Bearer {{adminToken}}
+
