@@ -5,6 +5,7 @@ import epsi.archiapp.backend.dto.SpectacleResponse;
 import epsi.archiapp.backend.exception.ResourceNotFoundException;
 import epsi.archiapp.backend.mapper.SpectacleMapper;
 import epsi.archiapp.backend.model.Spectacle;
+import epsi.archiapp.backend.repository.ReservationRepository;
 import epsi.archiapp.backend.repository.SpectacleRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class SpectacleService {
 
     private final SpectacleRepository spectacleRepository;
+    private final ReservationRepository reservationRepository;
     private final SpectacleMapper spectacleMapper;
 
     /**
@@ -79,7 +81,7 @@ public class SpectacleService {
     }
 
     /**
-     * Supprime un spectacle.
+     * Supprime un spectacle et toutes ses réservations associées.
      * Invalide tout le cache des spectacles car la liste a changé.
      */
     @Transactional
@@ -89,6 +91,10 @@ public class SpectacleService {
         if (!spectacleRepository.existsById(id)) {
             throw new ResourceNotFoundException("Spectacle", "id", id);
         }
+        // Supprimer d'abord toutes les réservations liées au spectacle
+        reservationRepository.deleteBySpectacleId(id);
+        log.info("Réservations associées au spectacle ID: {} supprimées", id);
+
         spectacleRepository.deleteById(id);
         log.info("Spectacle supprimé avec succès - ID: {}", id);
     }

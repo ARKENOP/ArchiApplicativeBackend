@@ -33,4 +33,6 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
            "GROUP BY r.spectacle.id, r.spectacle.title " +
            "ORDER BY revenue DESC")
     List<SalesBySpectacle> getSalesBySpectacle();
+
+    void deleteBySpectacleId(Long spectacleId);
 }

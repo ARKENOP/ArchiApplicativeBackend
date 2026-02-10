@@ -5,6 +5,7 @@ import epsi.archiapp.backend.dto.SpectacleResponse;
 import epsi.archiapp.backend.exception.ResourceNotFoundException;
 import epsi.archiapp.backend.mapper.SpectacleMapper;
 import epsi.archiapp.backend.model.Spectacle;
+import epsi.archiapp.backend.repository.ReservationRepository;
 import epsi.archiapp.backend.repository.SpectacleRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -33,6 +34,9 @@ class SpectacleServiceTest {
 
     @Mock
     private SpectacleRepository spectacleRepository;
+
+    @Mock
+    private ReservationRepository reservationRepository;
 
     @Mock
     private SpectacleMapper spectacleMapper;
@@ -182,10 +186,11 @@ class SpectacleServiceTest {
     }
 
     @Test
-    @DisplayName("Doit supprimer un spectacle existant")
+    @DisplayName("Doit supprimer un spectacle existant et ses réservations associées")
     void testDelete() {
         // Given
         when(spectacleRepository.existsById(1L)).thenReturn(true);
+        doNothing().when(reservationRepository).deleteBySpectacleId(1L);
         doNothing().when(spectacleRepository).deleteById(1L);
 
         // When
@@ -193,6 +198,7 @@ class SpectacleServiceTest {
 
         // Then
         verify(spectacleRepository).existsById(1L);
+        verify(reservationRepository).deleteBySpectacleId(1L);
         verify(spectacleRepository).deleteById(1L);
     }
 
