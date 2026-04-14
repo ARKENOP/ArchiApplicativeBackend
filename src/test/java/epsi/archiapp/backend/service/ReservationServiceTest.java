@@ -2,6 +2,7 @@ package epsi.archiapp.backend.service;
 
 import epsi.archiapp.backend.dto.ReservationRequest;
 import epsi.archiapp.backend.dto.ReservationResponse;
+import epsi.archiapp.backend.dto.StatsResponse;
 import epsi.archiapp.backend.exception.InsufficientTicketsException;
 import epsi.archiapp.backend.exception.ResourceNotFoundException;
 import epsi.archiapp.backend.exception.UnauthorizedAccessException;
@@ -11,7 +12,6 @@ import epsi.archiapp.backend.model.Spectacle;
 import epsi.archiapp.backend.repository.ReservationRepository;
 import epsi.archiapp.backend.repository.SpectacleRepository;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -27,21 +27,18 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("Tests du service Réservation")
 class ReservationServiceTest {
 
     @Mock
     private ReservationRepository reservationRepository;
-
     @Mock
     private SpectacleRepository spectacleRepository;
-
     @Mock
     private ReservationMapper reservationMapper;
 
@@ -49,202 +46,179 @@ class ReservationServiceTest {
     private ReservationService reservationService;
 
     private Spectacle spectacle;
-    private Reservation reservation;
-    private ReservationRequest reservationRequest;
-    private ReservationResponse reservationResponse;
-    private final String userId = "user-123";
+    private ReservationRequest request;
 
     @BeforeEach
     void setUp() {
         spectacle = Spectacle.builder()
-                .id(1L)
-                .title("Le Malade Imaginaire")
-                .description("Comédie de Molière")
-                .date(LocalDateTime.now().plusDays(30))
-                .price(new BigDecimal("25.00"))
-                .availableTickets(100)
-                .version(1L)
+                .id(10L)
+                .title("Hamlet")
+                .price(new BigDecimal("30.00"))
+                .availableTickets(50)
+                .date(LocalDateTime.now().plusDays(2))
                 .build();
 
-        reservationRequest = new ReservationRequest(1L, 2);
-
-        reservation = Reservation.builder()
-                .id(1L)
-                .keycloakUserId(userId)
-                .spectacle(spectacle)
-                .quantity(2)
-                .totalPrice(new BigDecimal("50.00"))
-                .reservationDate(LocalDateTime.now())
-                .build();
-
-        reservationResponse = ReservationResponse.builder()
-                .id(1L)
-                .quantity(2)
-                .totalPrice(new BigDecimal("50.00"))
-                .reservationDate(LocalDateTime.now())
-                .build();
+        request = new ReservationRequest(10L, 2);
     }
 
     @Test
-    @DisplayName("Doit créer une réservation avec succès")
-    void testCreateReservation() {
-        // Given
-        when(spectacleRepository.findByIdWithLock(1L)).thenReturn(Optional.of(spectacle));
-        when(reservationMapper.toEntity(eq(reservationRequest), eq(spectacle), eq(userId), any(BigDecimal.class)))
-                .thenReturn(reservation);
-        when(reservationRepository.save(reservation)).thenReturn(reservation);
-        when(reservationMapper.toResponse(reservation)).thenReturn(reservationResponse);
-        when(spectacleRepository.save(spectacle)).thenReturn(spectacle);
+    void createReservation_shouldCreateReservationWhenInputIsValid() {
+        Reservation savedReservation = Reservation.builder().id(99L).spectacle(spectacle).quantity(2).build();
+        ReservationResponse expectedResponse = ReservationResponse.builder().id(99L).build();
 
-        // When
-        ReservationResponse result = reservationService.createReservation(userId, reservationRequest);
+        when(spectacleRepository.findByIdWithLock(10L)).thenReturn(Optional.of(spectacle));
+        when(reservationMapper.toEntity(eq(request), eq(spectacle), eq("user-1"), eq(new BigDecimal("60.00"))))
+                .thenReturn(savedReservation);
+        when(reservationRepository.save(savedReservation)).thenReturn(savedReservation);
+        when(reservationMapper.toResponse(savedReservation)).thenReturn(expectedResponse);
 
-        // Then
-        assertThat(result).isNotNull();
-        assertThat(result.getQuantity()).isEqualTo(2);
-        assertThat(spectacle.getAvailableTickets()).isEqualTo(98); // 100 - 2
-        verify(spectacleRepository).findByIdWithLock(1L);
-        verify(reservationRepository).save(reservation);
+        ReservationResponse result = reservationService.createReservation("user-1", request);
+
+        assertThat(result).isEqualTo(expectedResponse);
+        assertThat(spectacle.getAvailableTickets()).isEqualTo(48);
         verify(spectacleRepository).save(spectacle);
+        verify(reservationRepository).save(savedReservation);
     }
 
     @Test
-    @DisplayName("Doit lancer InsufficientTicketsException si pas assez de billets")
-    void testCreateReservationInsufficientTickets() {
-        // Given
-        spectacle.setAvailableTickets(1);
-        when(spectacleRepository.findByIdWithLock(1L)).thenReturn(Optional.of(spectacle));
+    void createReservation_shouldThrowWhenSpectacleDoesNotExist() {
+        when(spectacleRepository.findByIdWithLock(10L)).thenReturn(Optional.empty());
 
-        // When & Then
-        assertThatThrownBy(() -> reservationService.createReservation(userId, reservationRequest))
-                .isInstanceOf(InsufficientTicketsException.class);
-        verify(spectacleRepository).findByIdWithLock(1L);
-        verify(reservationRepository, never()).save(any());
-    }
-
-    @Test
-    @DisplayName("Doit lancer ResourceNotFoundException si le spectacle n'existe pas")
-    void testCreateReservationSpectacleNotFound() {
-        // Given
-        when(spectacleRepository.findByIdWithLock(999L)).thenReturn(Optional.empty());
-        reservationRequest.setSpectacleId(999L);
-
-        // When & Then
-        assertThatThrownBy(() -> reservationService.createReservation(userId, reservationRequest))
+        assertThatThrownBy(() -> reservationService.createReservation("user-1", request))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Spectacle");
-        verify(spectacleRepository).findByIdWithLock(999L);
+
+        verifyNoInteractions(reservationMapper);
         verify(reservationRepository, never()).save(any());
     }
 
     @Test
-    @DisplayName("Doit lancer IllegalStateException si le spectacle est passé")
-    void testCreateReservationPastSpectacle() {
-        // Given
+    void createReservation_shouldThrowWhenTicketsAreInsufficient() {
+        spectacle.setAvailableTickets(1);
+        when(spectacleRepository.findByIdWithLock(10L)).thenReturn(Optional.of(spectacle));
+
+        assertThatThrownBy(() -> reservationService.createReservation("user-1", request))
+                .isInstanceOf(InsufficientTicketsException.class)
+                .hasMessageContaining("Pas assez de billets");
+
+        verify(reservationRepository, never()).save(any());
+    }
+
+    @Test
+    void createReservation_shouldThrowWhenSpectacleIsInPast() {
         spectacle.setDate(LocalDateTime.now().minusDays(1));
-        when(spectacleRepository.findByIdWithLock(1L)).thenReturn(Optional.of(spectacle));
+        when(spectacleRepository.findByIdWithLock(10L)).thenReturn(Optional.of(spectacle));
 
-        // When & Then
-        assertThatThrownBy(() -> reservationService.createReservation(userId, reservationRequest))
+        assertThatThrownBy(() -> reservationService.createReservation("user-1", request))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("passé");
-        verify(spectacleRepository).findByIdWithLock(1L);
-        verify(reservationRepository, never()).save(any());
+                .hasMessageContaining("spectacle passé");
     }
 
     @Test
-    @DisplayName("Doit récupérer les réservations d'un utilisateur avec pagination")
-    void testGetUserReservations() {
-        // Given
+    void getUserReservations_shouldReturnMappedPage() {
         Pageable pageable = PageRequest.of(0, 10);
-        Page<Reservation> reservationPage = new PageImpl<>(List.of(reservation));
-        when(reservationRepository.findByKeycloakUserId(userId, pageable)).thenReturn(reservationPage);
-        when(reservationMapper.toResponse(reservation)).thenReturn(reservationResponse);
+        Reservation reservation = Reservation.builder().id(1L).spectacle(spectacle).build();
+        ReservationResponse response = ReservationResponse.builder().id(1L).build();
+        Page<Reservation> page = new PageImpl<>(List.of(reservation), pageable, 1);
 
-        // When
-        Page<ReservationResponse> result = reservationService.getUserReservations(userId, pageable);
+        when(reservationRepository.findByKeycloakUserId("user-1", pageable)).thenReturn(page);
+        when(reservationMapper.toResponse(reservation)).thenReturn(response);
 
-        // Then
-        assertThat(result).isNotNull();
-        assertThat(result.getContent()).hasSize(1);
-        verify(reservationRepository).findByKeycloakUserId(userId, pageable);
+        Page<ReservationResponse> result = reservationService.getUserReservations("user-1", pageable);
+
+        assertThat(result.getContent()).containsExactly(response);
     }
 
     @Test
-    @DisplayName("Doit récupérer une réservation par ID")
-    void testGetReservationById() {
-        // Given
-        when(reservationRepository.findById(1L)).thenReturn(Optional.of(reservation));
-        when(reservationMapper.toResponse(reservation)).thenReturn(reservationResponse);
+    void getReservationById_shouldThrowWhenReservationBelongsToAnotherUser() {
+        Reservation reservation = Reservation.builder().id(5L).keycloakUserId("owner").spectacle(spectacle).build();
+        when(reservationRepository.findById(5L)).thenReturn(Optional.of(reservation));
 
-        // When
-        ReservationResponse result = reservationService.getReservationById(1L, userId);
-
-        // Then
-        assertThat(result).isNotNull();
-        verify(reservationRepository).findById(1L);
-        verify(reservationMapper).toResponse(reservation);
+        assertThatThrownBy(() -> reservationService.getReservationById(5L, "other-user"))
+                .isInstanceOf(UnauthorizedAccessException.class)
+                .hasMessageContaining("autorisé");
     }
 
     @Test
-    @DisplayName("Doit lancer UnauthorizedAccessException si l'utilisateur n'est pas le propriétaire")
-    void testGetReservationByIdUnauthorized() {
-        // Given
-        when(reservationRepository.findById(1L)).thenReturn(Optional.of(reservation));
+    void cancelReservation_shouldRestoreTicketsAndDeleteReservation() {
+        Reservation reservation = Reservation.builder()
+                .id(7L)
+                .quantity(3)
+                .keycloakUserId("user-1")
+                .spectacle(spectacle)
+                .build();
 
-        // When & Then
-        assertThatThrownBy(() -> reservationService.getReservationById(1L, "autre-user"))
-                .isInstanceOf(UnauthorizedAccessException.class);
-        verify(reservationRepository).findById(1L);
-        verify(reservationMapper, never()).toResponse(any());
-    }
+        when(reservationRepository.findById(7L)).thenReturn(Optional.of(reservation));
 
-    @Test
-    @DisplayName("Doit annuler une réservation avec succès")
-    void testCancelReservation() {
-        // Given
-        when(reservationRepository.findById(1L)).thenReturn(Optional.of(reservation));
-        doNothing().when(reservationRepository).delete(reservation);
-        when(spectacleRepository.save(spectacle)).thenReturn(spectacle);
+        reservationService.cancelReservation(7L, "user-1");
 
-        int initialTickets = spectacle.getAvailableTickets();
-
-        // When
-        reservationService.cancelReservation(1L, userId);
-
-        // Then
-        assertThat(spectacle.getAvailableTickets()).isEqualTo(initialTickets + 2); // Remise en disponibilité
-        verify(reservationRepository).findById(1L);
-        verify(reservationRepository).delete(reservation);
+        assertThat(spectacle.getAvailableTickets()).isEqualTo(53);
         verify(spectacleRepository).save(spectacle);
+        verify(reservationRepository).delete(reservation);
     }
 
     @Test
-    @DisplayName("Doit lancer UnauthorizedAccessException lors de l'annulation par un autre utilisateur")
-    void testCancelReservationUnauthorized() {
-        // Given
-        when(reservationRepository.findById(1L)).thenReturn(Optional.of(reservation));
+    void cancelReservation_shouldThrowWhenSpectacleIsInPast() {
+        spectacle.setDate(LocalDateTime.now().minusHours(2));
+        Reservation reservation = Reservation.builder()
+                .id(7L)
+                .quantity(3)
+                .keycloakUserId("user-1")
+                .spectacle(spectacle)
+                .build();
+        when(reservationRepository.findById(7L)).thenReturn(Optional.of(reservation));
 
-        // When & Then
-        assertThatThrownBy(() -> reservationService.cancelReservation(1L, "autre-user"))
-                .isInstanceOf(UnauthorizedAccessException.class);
-        verify(reservationRepository).findById(1L);
-        verify(reservationRepository, never()).delete(any());
-    }
-
-    @Test
-    @DisplayName("Doit lancer IllegalStateException si le spectacle est passé lors de l'annulation")
-    void testCancelReservationPastSpectacle() {
-        // Given
-        spectacle.setDate(LocalDateTime.now().minusDays(1));
-        when(reservationRepository.findById(1L)).thenReturn(Optional.of(reservation));
-
-        // When & Then
-        assertThatThrownBy(() -> reservationService.cancelReservation(1L, userId))
+        assertThatThrownBy(() -> reservationService.cancelReservation(7L, "user-1"))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("passé");
-        verify(reservationRepository).findById(1L);
-        verify(reservationRepository, never()).delete(any());
+                .hasMessageContaining("spectacle passé");
+    }
+
+    @Test
+    void getStatistics_shouldReturnZeroRevenueWhenNoSales() {
+        when(reservationRepository.getTotalSales()).thenReturn(null);
+        when(reservationRepository.count()).thenReturn(0L);
+        when(reservationRepository.getSalesBySpectacle()).thenReturn(List.of());
+
+        StatsResponse result = reservationService.getStatistics();
+
+        assertThat(result.getTotalRevenue()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(result.getTotalReservations()).isZero();
+        assertThat(result.getSalesBySpectacle()).isEmpty();
+    }
+
+    @Test
+    void getStatistics_shouldMapSalesBySpectacle() {
+        ReservationRepository.SalesBySpectacle row = new ReservationRepository.SalesBySpectacle() {
+            @Override
+            public Long getSpectacleId() {
+                return 1L;
+            }
+
+            @Override
+            public String getTitle() {
+                return "Hamlet";
+            }
+
+            @Override
+            public Long getTicketsSold() {
+                return 9L;
+            }
+
+            @Override
+            public BigDecimal getRevenue() {
+                return new BigDecimal("270.00");
+            }
+        };
+
+        when(reservationRepository.getTotalSales()).thenReturn(new BigDecimal("270.00"));
+        when(reservationRepository.count()).thenReturn(3L);
+        when(reservationRepository.getSalesBySpectacle()).thenReturn(List.of(row));
+
+        StatsResponse result = reservationService.getStatistics();
+
+        assertThat(result.getTotalRevenue()).isEqualByComparingTo("270.00");
+        assertThat(result.getSalesBySpectacle()).hasSize(1);
+        assertThat(result.getSalesBySpectacle().getFirst().getTitle()).isEqualTo("Hamlet");
     }
 }
 

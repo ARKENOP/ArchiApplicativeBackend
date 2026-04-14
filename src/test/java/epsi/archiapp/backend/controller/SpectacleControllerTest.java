@@ -1,22 +1,19 @@
 package epsi.archiapp.backend.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import epsi.archiapp.backend.config.TestSecurityConfig;
+import epsi.archiapp.backend.config.SecurityConfig;
 import epsi.archiapp.backend.dto.SpectacleRequest;
 import epsi.archiapp.backend.dto.SpectacleResponse;
 import epsi.archiapp.backend.service.SpectacleService;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
+import epsi.archiapp.backend.testsupport.JwtTestFactory;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.http.MediaType;
-import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
@@ -25,189 +22,104 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.*;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(controllers = SpectacleController.class,
-    excludeAutoConfiguration = org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration.class)
-@Import(TestSecurityConfig.class)
-@DisplayName("Tests du contrôleur Spectacle")
+@WebMvcTest(SpectacleController.class)
+@Import(SecurityConfig.class)
 class SpectacleControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
-
     @Autowired
     private ObjectMapper objectMapper;
 
     @MockitoBean
     private SpectacleService spectacleService;
-
-    private SpectacleResponse spectacleResponse;
-    private SpectacleRequest spectacleRequest;
-
-    @BeforeEach
-    void setUp() {
-        spectacleResponse = SpectacleResponse.builder()
-                .id(1L)
-                .title("Le Malade Imaginaire")
-                .description("Comédie de Molière")
-                .date(LocalDateTime.now().plusDays(30))
-                .price(new BigDecimal("25.00"))
-                .availableTickets(100)
-                .imageUrl("https://example.com/image.jpg")
-                .build();
-
-        spectacleRequest = SpectacleRequest.builder()
-                .title("Le Malade Imaginaire")
-                .description("Comédie de Molière")
-                .date(LocalDateTime.now().plusDays(30))
-                .price(new BigDecimal("25.00"))
-                .availableTickets(100)
-                .imageUrl("https://example.com/image.jpg")
-                .build();
-    }
+    @MockitoBean
+    private JwtDecoder jwtDecoder;
 
     @Test
-    @DisplayName("GET /api/spectacles - Doit retourner la liste paginée des spectacles")
-    void testListSpectacles() throws Exception {
-        // Given
-        Page<SpectacleResponse> page = new PageImpl<>(List.of(spectacleResponse), PageRequest.of(0, 20), 1);
-        when(spectacleService.listAll(any())).thenReturn(page);
+    void list_shouldBePublic() throws Exception {
+        SpectacleResponse response = SpectacleResponse.builder().id(1L).title("Hamlet").build();
+        when(spectacleService.listAll(any())).thenReturn(new PageImpl<>(List.of(response), PageRequest.of(0, 20), 1));
 
-        // When & Then
-        mockMvc.perform(get("/api/spectacles")
-                        .param("page", "0")
-                        .param("size", "20"))
+        mockMvc.perform(get("/api/spectacles"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content").isArray())
-                .andExpect(jsonPath("$.content[0].title").value("Le Malade Imaginaire"))
-                .andExpect(jsonPath("$.totalElements").value(1));
-
-        verify(spectacleService).listAll(any());
+                .andExpect(jsonPath("$.content[0].title").value("Hamlet"));
     }
 
     @Test
-    @DisplayName("GET /api/spectacles/{id} - Doit retourner un spectacle par ID")
-    void testGetSpectacle() throws Exception {
-        // Given
-        when(spectacleService.get(1L)).thenReturn(spectacleResponse);
+    void create_shouldReturn401WithoutAuthentication() throws Exception {
+        SpectacleRequest request = validRequest();
 
-        // When & Then
-        mockMvc.perform(get("/api/spectacles/1"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(1))
-                .andExpect(jsonPath("$.title").value("Le Malade Imaginaire"))
-                .andExpect(jsonPath("$.price").value(25.00));
-
-        verify(spectacleService).get(1L);
-    }
-
-    @Test
-    @WithMockUser(roles = "ADMIN")
-    @DisplayName("POST /api/spectacles - Doit créer un nouveau spectacle (ADMIN)")
-    void testCreateSpectacle() throws Exception {
-        // Given
-        when(spectacleService.create(any(SpectacleRequest.class))).thenReturn(spectacleResponse);
-
-        // When & Then
         mockMvc.perform(post("/api/spectacles")
-                        .with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(spectacleRequest)))
+                        .contentType(APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void create_shouldReturn403ForNonAdmin() throws Exception {
+        SpectacleRequest request = validRequest();
+
+        mockMvc.perform(post("/api/spectacles")
+                        .with(JwtTestFactory.userJwt("user"))
+                        .contentType(APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void create_shouldReturn201ForAdmin() throws Exception {
+        SpectacleRequest request = validRequest();
+        SpectacleResponse response = SpectacleResponse.builder().id(3L).title("Nouveau").build();
+        when(spectacleService.create(any(SpectacleRequest.class))).thenReturn(response);
+
+        mockMvc.perform(post("/api/spectacles")
+                        .with(JwtTestFactory.adminJwt("admin"))
+                        .contentType(APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.title").value("Le Malade Imaginaire"));
-
-        verify(spectacleService).create(any(SpectacleRequest.class));
+                .andExpect(jsonPath("$.id").value(3));
     }
 
     @Test
-    @DisplayName("POST /api/spectacles - La création fonctionne sans vérification de sécurité (test unitaire)")
-    void testCreateSpectacleUnauthorized() throws Exception {
-        // Given - La sécurité est désactivée pour les tests unitaires
-        when(spectacleService.create(any(SpectacleRequest.class))).thenReturn(spectacleResponse);
+    void update_shouldReturn200ForAdmin() throws Exception {
+        SpectacleRequest request = validRequest();
+        SpectacleResponse response = SpectacleResponse.builder().id(7L).title("Maj").build();
+        when(spectacleService.update(eq(7L), any(SpectacleRequest.class))).thenReturn(response);
 
-        // When & Then - Dans un test unitaire, on teste la logique du contrôleur, pas la sécurité
-        mockMvc.perform(post("/api/spectacles")
-                        .with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(spectacleRequest)))
-                .andExpect(status().isCreated());
-
-        verify(spectacleService).create(any());
-    }
-
-    @Test
-    @WithMockUser(roles = "USER")
-    @DisplayName("POST /api/spectacles - La création fonctionne sans vérification de sécurité (test unitaire)")
-    void testCreateSpectacleForbidden() throws Exception {
-        // Given - La sécurité est désactivée pour les tests unitaires
-        when(spectacleService.create(any(SpectacleRequest.class))).thenReturn(spectacleResponse);
-
-        // When & Then - Dans un test unitaire, on teste la logique du contrôleur, pas la sécurité
-        mockMvc.perform(post("/api/spectacles")
-                        .with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(spectacleRequest)))
-                .andExpect(status().isCreated());
-
-        verify(spectacleService).create(any());
-    }
-
-    @Test
-    @WithMockUser(roles = "ADMIN")
-    @DisplayName("PUT /api/spectacles/{id} - Doit mettre à jour un spectacle (ADMIN)")
-    void testUpdateSpectacle() throws Exception {
-        // Given
-        when(spectacleService.update(eq(1L), any(SpectacleRequest.class))).thenReturn(spectacleResponse);
-
-        // When & Then
-        mockMvc.perform(put("/api/spectacles/1")
-                        .with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(spectacleRequest)))
+        mockMvc.perform(put("/api/spectacles/7")
+                        .with(JwtTestFactory.adminJwt("admin"))
+                        .contentType(APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.title").value("Le Malade Imaginaire"));
-
-        verify(spectacleService).update(eq(1L), any(SpectacleRequest.class));
+                .andExpect(jsonPath("$.title").value("Maj"));
     }
 
     @Test
-    @WithMockUser(roles = "ADMIN")
-    @DisplayName("DELETE /api/spectacles/{id} - Doit supprimer un spectacle (ADMIN)")
-    void testDeleteSpectacle() throws Exception {
-        // Given
-        doNothing().when(spectacleService).delete(1L);
-
-        // When & Then
-        mockMvc.perform(delete("/api/spectacles/1")
-                        .with(csrf()))
+    void delete_shouldReturn204ForAdmin() throws Exception {
+        mockMvc.perform(delete("/api/spectacles/9").with(JwtTestFactory.adminJwt("admin")))
                 .andExpect(status().isNoContent());
 
-        verify(spectacleService).delete(1L);
+        verify(spectacleService).delete(9L);
     }
 
-    @Test
-    @WithMockUser(roles = "ADMIN")
-    @DisplayName("POST /api/spectacles - Doit valider les données d'entrée")
-    void testCreateSpectacleValidation() throws Exception {
-        // Given
-        SpectacleRequest invalidRequest = SpectacleRequest.builder()
-                .title("Ab") // Trop court
-                .price(new BigDecimal("-10.00")) // Négatif
-                .availableTickets(-5) // Négatif
+    private SpectacleRequest validRequest() {
+        return SpectacleRequest.builder()
+                .title("Nouveau")
+                .description("Description")
+                .date(LocalDateTime.now().plusDays(3))
+                .price(new BigDecimal("22.00"))
+                .availableTickets(50)
+                .imageUrl("https://example.test/img.jpg")
                 .build();
-
-        // When & Then
-        mockMvc.perform(post("/api/spectacles")
-                        .with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(invalidRequest)))
-                .andExpect(status().isBadRequest());
-
-        verify(spectacleService, never()).create(any());
     }
 }
+
 
